@@ -1,0 +1,101 @@
+{
+    "name": "Template R Operator",
+    "description": "A template to build a Tercen operator in R.",
+    "tags": ["template"],
+    "authors": ["tercen"],
+    "urls": ["https://github.com/tercen/template-R-operator"],
+    "container":"ghcr.io/tercen/template-R-operator:2.0.0",
+    "properties": [
+        {
+            "kind": "DoubleProperty",
+            "name": "Property1",
+            "defaultValue": 42.0,
+            "description": "Example Double Property"
+        },
+        {
+            "kind": "StringProperty",
+            "name": "Property2",
+            "defaultValue": "42",
+            "description": "Example String Property"
+        },
+        {
+            "kind": "BooleanProperty",
+            "name": "Property3",
+            "defaultValue": true,
+            "description": "Example Boolean Property"
+        },
+        {
+            "kind": "EnumeratedProperty",
+            "isSingleSelection":true,
+            "name": "Property4",
+            "defaultValue": "element2",
+            "values": ["element1", "element2", "element3"],
+            "description": "Example Enumerated Property"
+        }
+    ],
+    "operatorSpec": {
+        "kind": "OperatorSpec",
+        "ontologyUri": "https://tercen.com/_ontology/tercen",
+        "ontologyVersion": "0.0.1",
+        "inputSpecs": [
+        {
+            "kind": "CrosstabSpec",
+            "metaFactors": [
+            {
+                "kind": "MetaFactor",
+                "name": "Sample",
+                "type": "",
+                "description": "Sample identifiers",
+                "ontologyMapping": "sample",
+                "crosstabMapping": "row",
+                "cardinality": "1..n",
+                "factors": []
+            },
+            {
+                "kind": "MetaFactor",
+                "name": "Variable",
+                "type": "",
+                "description": "Variable identifiers",
+                "ontologyMapping": "variable",
+                "crosstabMapping": "column",
+                "cardinality": "1..n",
+                "factors": []
+            }
+            ],
+            "axis": [
+            {
+                "kind": "AxisSpec",
+                "metaFactors": [
+                {
+                    "kind": "MetaFactor",
+                    "name": "Y-Axis Measurement",
+                    "type": "numeric",
+                    "description": "Measurement value, per cell",
+                    "ontologyMapping": "measurement",
+                    "crosstabMapping": "y",
+                    "cardinality": "1",
+                    "factors": []
+                }
+                ]
+            },
+            {
+                "kind": "AxisSpec",
+                "metaFactors": [
+                {
+                    "kind": "MetaFactor",
+                    "name": "X-Axis Measurement (Optional)",
+                    "type": "numeric",
+                    "description": "Second measurement value, per cell (optional)",
+                    "ontologyMapping": "measurement",
+                    "crosstabMapping": "x",
+                    "cardinality": "0..1",
+                    "factors": []
+                }
+                ]
+            }
+            ]
+        }
+        ],
+        "outputSpecs": []
+  }
+}

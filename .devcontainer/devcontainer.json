@@ -1,0 +1,29 @@
+// Tercen Operator Runtime development container specification.
+{
+	"name": "Tercen Operator Runtime",
+  	"image": "tercen/runtime-r44:4.4.3-11",
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	// Configure tool-specific properties.
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "reditorsupport.r-syntax",
+				"reditorsupport.r",
+				"ms-toolsai.jupyter",
+				"ms-toolsai.jupyter-keymap",
+                "github.copilot",
+                "github.copilot-chat"
+            ]
+        }
+    },
+
+	// Set the default shell
+	// "postCreateCommand": "R -e 'renv::consent(provided = TRUE); renv::restore(confirm = FALSE)'"
+
+	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
+	// "remoteUser": "devcontainer"
+}
+
