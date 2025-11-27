@@ -72,17 +72,41 @@ graph_conv_layer <- function(units,
 # DATA PREPROCESSING FUNCTIONS
 # ===============================================================================
 
-# Function to create adjacency matrix from edge list
-create_adjacency_matrix <- function(edge_list, n_nodes) {
-  adj_matrix <- Matrix::sparseMatrix(
-    i = edge_list[,1], 
-    j = edge_list[,2], 
-    x = rep(1, nrow(edge_list)),
-    dims = c(n_nodes, n_nodes)
-  )
+# Function to create adjacency matrix from edge list using igraph
+create_adjacency_matrix <- function(edge_list, n_nodes = NULL) {
+  # Convert edge list to data frame if it's a matrix
+  if (is.matrix(edge_list)) {
+    edge_list <- as.data.frame(edge_list)
+  }
   
-  # Make symmetric and add self-loops
-  adj_matrix <- adj_matrix + Matrix::t(adj_matrix)
+  # Ensure we have at least 2 columns
+  if (ncol(edge_list) < 2) {
+    stop("Edge list must have at least 2 columns (source, target)")
+  }
+  
+  # Get unique nodes from edge list
+  all_nodes <- unique(c(edge_list[,1], edge_list[,2]))
+  
+  # If n_nodes is specified, ensure we include all nodes up to n_nodes
+  if (!is.null(n_nodes)) {
+    # Create a complete set of node names
+    if (is.numeric(all_nodes)) {
+      all_nodes <- unique(c(all_nodes, 1:n_nodes))
+    } else {
+      # For character nodes, we'll work with what we have
+      if (length(all_nodes) > n_nodes) {
+        warning("Number of unique nodes exceeds n_nodes parameter")
+      }
+    }
+  }
+  
+  # Create igraph object
+  g <- igraph::graph_from_data_frame(edge_list, directed = FALSE, vertices = all_nodes)
+  
+  # Convert to adjacency matrix
+  adj_matrix <- igraph::as_adjacency_matrix(g, sparse = TRUE)
+  
+  # Add self-loops
   Matrix::diag(adj_matrix) <- 1
   
   return(adj_matrix)

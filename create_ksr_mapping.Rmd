@@ -1,0 +1,89 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+
+- Load PamChip data 
+- get ksr scores
+- get kinase projection
+
+# Settings
+
+settings to edit
+
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(MOFA2)
+library(pgUpstream)
+library(ComplexHeatmap)
+
+min_sim = 0.9 # min value for the sequence similarity for peptide and matched phosphosite
+
+residue = "Y" # "Y" for PTK, c("S", "T") for STK
+
+# scheme for confindence scoring of Kinase Substrate Relation (KSR)
+# NOTE for KL the ranks are taken from the "quantile ranks". 
+
+scores = list( expand.grid(database = "PhosphoNET", rank = 1:4) %>%  mutate(cscore = 0.9),
+               expand.grid(database = "PhosphoNET", rank = 5:12) %>%  mutate(cscore = 0.7),
+               expand.grid(database = "KL", rank = 1:4) %>%  mutate(cscore = 0),
+               expand.grid(database = "KL", rank = 5:12) %>%  mutate(cscore = 0),
+               data.frame(database = "iviv", rank = 0, cscore =0.9))
+
+scores_df = scores %>% 
+  bind_rows()
+
+print(scores_df)
+
+min_score = 0.055# min value of cscore to use a KSR in the analysis
+
+```
+
+# load UKA DB, process to normalized confidence scores
+Computes Matrix K: KSR score between peptides (rows) and kinases (columns)
+
+```{r, fig.width = 18, fig.height = 15}
+# UKA db (traditional and KL)
+ukadb = readRDS( "./data/240516_86312_86402_86412_87102_87202_UpstreamDb.rds"    )
+load("./data/250630_KinaseLibrary_UKAdb.Rdata" ) # KL-ukadb
+
+# combined trad with ranked KL library
+ukadb = ukadb %>% 
+  bind_rows(KL_ukadb) %>% 
+  filter(PepProtein_SeqSimilarity >= min_sim) %>% 
+  filter(PepProtein_Residue %in% residue) %>% 
+  filter(Kinase_group == "TYR") # remove spurious STKs
+
+nKinases = ukadb %>% 
+  pull(Kinase_Name) %>% 
+  length()
+
+scores_df %>% 
+  mutate(cscore = ifelse(cscore < 1/nKinases, 1/nKinases, cscore))
+
+# get UKA db with normalized weights:
+dbw = ukadb %>%
+  add_scores(scores_df) %>% 
+  cscore2w(na.wt = 1/nKinases) %>% 
+  arrange(-wn)
+
+dbw %>% 
+  ggplot(aes(x = wn)) + 
+  geom_density(fill = "lightblue") +
+  # add log x axis
+  scale_x_log10() 
+
+kinase_info = read.csv("./data/240516_86312_86402_86412_87102_87202_UpstreamDb_Kinase_enrichment.csv")
+
+dbw = dbw %>% 
+  left_join(kinase_info, by = "Kinase_Name")
+
+```
+
