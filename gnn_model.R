@@ -1,11 +1,36 @@
+# Visualize the substrate-kinase and kinase-pathway bipartite graphs using igraph
+visualize_gnn_graphs <- function(substrate_kinase_edges, kinase_pathway_edges, file_prefix = "gnn_graph") {
+  # Substrate-Kinase graph
+  g_sk <- igraph::graph_from_data_frame(substrate_kinase_edges, directed = TRUE)
+  png(paste0(file_prefix, "_substrate_kinase.png"), width = 800, height = 600)
+  plot(g_sk, main = "Substrate-Kinase Bipartite Graph", vertex.size = 20, vertex.label.cex = 0.8)
+  dev.off()
+
+  # Kinase-Pathway graph
+  g_kp <- igraph::graph_from_data_frame(kinase_pathway_edges, directed = TRUE)
+  png(paste0(file_prefix, "_kinase_pathway.png"), width = 800, height = 600)
+  plot(g_kp, main = "Kinase-Pathway Bipartite Graph", vertex.size = 20, vertex.label.cex = 0.8)
+  dev.off()
+  cat("Graph visualizations saved as PNG files.\n")
+}
+
+# Visualize the sample graphs
+
+# GNN model visualization utility
+plot_gnn_model <- function(model, filename = "gnn_model.png") {
+  keras3::plot_model(model, to_file = filename, show_shapes = TRUE, show_layer_names = TRUE)
+  cat(paste0("Model plot saved to ", filename, "\n"))
+}
+
 # ===============================================================================
 # GNN Model Definition: Substrate -> Kinase -> Pathway -> Categorical Response
 # Rectangular (bipartite) graph convolution between successive biological entity sets
 # ===============================================================================
 
 # Load required libraries for model building
-library(keras)
-library(tensorflow)
+library(keras3)
+
+# tensorflow is loaded automatically by keras3 if needed
 library(Matrix)
 library(dplyr)  # For %>% operator
 library(igraph)  # For network/graph operations
@@ -47,20 +72,26 @@ create_graph_conv_layer <- function(adjacency_matrix,
                                     use_bias = TRUE,
                                     kernel_regularizer = NULL,
                                     name = NULL) {
-  layer_lambda(
-    function(x) {
-      adj_tensor <- k_constant(adjacency_matrix)
-      k_dot(adj_tensor, x)  # (target_nodes, source_nodes) * (batch, source_nodes) => (target_nodes, batch) then transposed implicitly
-    },
-    name = paste0(name, "_graph_conv")
-  ) %>%
-    layer_dense(
-      units = units,
-      activation = activation,
-      use_bias = use_bias,
-      kernel_regularizer = kernel_regularizer,
-      name = name
-    )
+  function(x) {
+    n_targets <- dim(adjacency_matrix)[1]
+    n_sources <- dim(adjacency_matrix)[2]
+    x |> 
+      keras3::layer_lambda(
+        f = function(x) {
+          adj_tensor <- keras3::k_constant(adjacency_matrix)
+          keras3::k_dot(adj_tensor, x)
+        },
+        output_shape = list(n_targets, n_sources),
+        name = paste0(name, "_graph_conv")
+      ) |> 
+      keras3::layer_dense(
+        units = units,
+        activation = activation,
+        use_bias = use_bias,
+        kernel_regularizer = kernel_regularizer,
+        name = name
+      )
+  }
 }
 
 # ===============================================================================
@@ -122,41 +153,39 @@ build_substrate_kinase_pathway_gnn <- function(config,
   A_kp <- normalize_rectangular_adjacency(kinase_pathway_adj)
   
   # Input: substrate feature vector (one feature per substrate node)
-  substrate_input <- layer_input(shape = c(config$n_substrates), name = "substrate_features")
+  substrate_input <- keras3::layer_input(shape = c(config$n_substrates), name = "substrate_features")
   
   # Substrate -> Kinase convolution
-  kinase_rep <- substrate_input %>%
+  kinase_rep <- substrate_input |>
     create_graph_conv_layer(
       adjacency_matrix = A_sk,
       units = config$kinase_feature_dim,
       activation = 'relu',
-      kernel_regularizer = regularizer_l2(config$l2_reg),
       name = "kinase_conv"
-    ) %>%
-    layer_dropout(rate = config$dropout_rate, name = "kinase_dropout") %>%
-    layer_batch_normalization(name = "kinase_bn")
+    )() |>
+    keras3::layer_dropout(rate = config$dropout_rate, name = "kinase_dropout") |>
+    keras3::layer_batch_normalization(name = "kinase_bn")
   
   # Kinase -> Pathway convolution
-  pathway_rep <- kinase_rep %>%
+  pathway_rep <- kinase_rep |>
     create_graph_conv_layer(
       adjacency_matrix = A_kp,
       units = config$pathway_feature_dim,
       activation = 'relu',
-      kernel_regularizer = regularizer_l2(config$l2_reg),
       name = "pathway_conv"
-    ) %>%
-    layer_dropout(rate = config$dropout_rate, name = "pathway_dropout") %>%
-    layer_batch_normalization(name = "pathway_bn")
+    )() |>
+    keras3::layer_dropout(rate = config$dropout_rate, name = "pathway_dropout") |>
+    keras3::layer_batch_normalization(name = "pathway_bn")
   
   # Global mean pooling over pathway nodes (convert pathway node features to single vector)
-  pooled <- pathway_rep %>% layer_global_average_pooling_1d(name = "pathway_global_pool")
+  pooled <- pathway_rep |> keras3::layer_global_average_pooling_1d(name = "pathway_global_pool")
   
   # Categorical output (2 classes)
-  response <- pooled %>% layer_dense(units = config$n_classes,
-                                     activation = 'softmax',
-                                     name = "response")
+  response <- pooled |> keras3::layer_dense(units = config$n_classes,
+                                            activation = 'softmax',
+                                            name = "response")
   
-  keras_model(inputs = substrate_input, outputs = response, name = "substrate_kinase_pathway_gnn")
+  keras3::keras_model(inputs = substrate_input, outputs = response, name = "substrate_kinase_pathway_gnn")
 }
 
 # Backward compatible wrapper name
@@ -173,8 +202,9 @@ build_gnn_model <- function(config = default_config, adjacency_matrices) {
 # Function to compile the GNN model with appropriate optimizer and loss
 compile_gnn_model <- function(model, config = default_config, use_sparse_labels = FALSE) {
   loss_fn <- if (use_sparse_labels) 'sparse_categorical_crossentropy' else 'categorical_crossentropy'
-  model %>% compile(
-    optimizer = optimizer_adam(learning_rate = config$learning_rate),
+  keras3::compile(
+    model,
+    optimizer = keras3::optimizer_adam(learning_rate = config$learning_rate),
     loss = loss_fn,
     metrics = c('accuracy')
   )
@@ -242,8 +272,8 @@ print_model_config <- function(config = default_config) {
 # ===============================================================================
 
 generate_sample_edge_lists <- function(config = default_config,
-                                       n_sk_edges = 200,
-                                       n_kp_edges = 150) {
+                                       n_sk_edges = 10,
+                                       n_kp_edges = 3) {
   substrate_kinase_edges <- data.frame(
     substrate = sample(paste0('S', 1:config$n_substrates), n_sk_edges, replace = TRUE),
     kinase    = sample(paste0('K', 1:config$n_kinases), n_sk_edges, replace = TRUE)
@@ -271,3 +301,12 @@ generate_sample_edge_lists <- function(config = default_config,
 #                              kinase_pathway_edges   = kinase_pathway_df,
 #                              use_sparse_labels = TRUE)
 
+edges = generate_sample_edge_lists()
+
+A1 = edges[[1]] %>%  
+  create_rectangular_adjacency(from_col = 'substrate', to_col = 'kinase')
+
+agnn = build_gnn_from_edge_lists(edges[[1]], edges[[2]])
+
+# Visualize the sample graphs (after 'edges' is defined)
+visualize_gnn_graphs(edges$substrate_kinase, edges$kinase_pathway)
